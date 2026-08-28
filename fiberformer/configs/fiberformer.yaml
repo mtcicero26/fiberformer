@@ -1,0 +1,120 @@
+# FiberFormer training config: length-invariant physical Conformer over
+# FiberHMM footprint tokens.
+#
+# Key design choices:
+#   - DATA: MAPQ blacklist sidecar applied at FiberSeqDataset.__init__
+#     time (auto-detected from <cache>.mapq_keep.npy next to the cache).
+#     ~13% of training reads dropped as multi-mappers in
+#     centromere/satellite/segdup regions on hg38.
+#
+#   - MODEL: pool='length_weighted_sqrt'. Sqrt-bp weighting dampens
+#     length-correlated variance in the pooled unnormalized vector ~5.8x.
+#     AMP-safe `.clamp(min=1.0)` inside `sqrt` prevents fp16 NaN.
+#
+#   - DATASET AUGMENTATION (train only):
+#       * bp_position uniform shift in [0, 50000): destroys absolute
+#         read-start anchor that the 62.8kb-max bp-SinCos PE leaks.
+#         Conv1D + distance bias depend on relative coords, which are
+#         invariant under uniform shift.
+#       * chemistry jitter +/-0.02 in log10 space on continuous log_sizes
+#         and gap_to_next: models systematic +/-5% bp-call drift between
+#         library preps / m6A chemistries. Discrete bin targets
+#         (raw_size_bins, raw_gap_bins) NOT shifted -- they're Head B CE
+#         targets. CLS and end-of-read gap sentinel preserved.
+#       * 9 kb hard clamp on log_sizes + raw_size_bins applied AFTER
+#         jitter. Collapses all trivial-prot reads (n_fps=1, 10-60kb
+#         single footprint) to the same size token.
+#       * Sparse-read guard: n_tokens < 3 skips Head B masking entirely
+#         (Head A still trains on them via unmasked tokens).
+#
+#   - LOSSES: Head A + Head B. Head C contrastive scaffolded but disabled
+#     (lambda_c = 0). Head B `compute_head_b_loss` is DDP-safe when
+#     mask.sum()==0.
+
+data:
+  cache_version: "v3"
+  data_dir: "./data/bigbed"
+  cache_path: "./cache/fiberformer.h5"
+  size_encoding: "absolute_uncapped"
+
+  sperm_paths:
+    - "m6a_200_fp.bb"
+    - "PS00750_fp.bb"
+    - "PS00751_fp.bb"
+    - "PS00752_fp.bb"
+    - "PS00753_fp.bb"
+    - "PS00754_fp.bb"
+    - "PS00755_fp.bb"
+
+  testes_paths:
+    - "PS30065.sorted_footprint.bb"
+    - "PS30135.sorted_footprint.bb"
+    - "PS30330.sorted_footprint.bb"
+    - "PS30549.sorted_footprint.bb"
+
+  somatic_paths:
+    - "GM12878_fp.bb"
+    - "PS30010.sorted_footprint.bb"
+    - "PS30040.sorted_footprint.bb"
+    - "PS30071.sorted_footprint.bb"
+    - "PS30076.sorted_footprint.bb"
+    - "PS30086.sorted_footprint.bb"
+
+  pure_sperm_names: ["m6a_200_fp"]
+  maturity_threshold: 0.90
+
+  n_per_sperm: 12000
+  n_per_testes: 30000
+  n_per_somatic: 7000
+
+  max_tokens: 128
+  mask_rate: 0.40
+  span_min: 3
+  span_max: 5
+
+  pool_ratios:
+    sperm: 0.20
+    testes: 0.60
+    somatic: 0.20
+
+model:
+  d_model: 256
+  nhead: 8
+  n_layers: 6
+  d_ff: 1024
+  dropout: 0.1
+  logit_scale_init: 10.0
+  pool: "length_weighted_sqrt"
+  conv_kernel: 5
+  positional: "bp_sin_cos"
+  # n_type_ids = 7: CLS, PROT, NUC, SUB, LACUNA (unused when cache built
+  # with use_lacuna_tokens=False), MASK (=5 in current tokenizer), plus
+  # one reserved slot. The embedding needs at least 6 slots because the
+  # dataset substitutes MASK=5 at masked positions.
+  n_type_ids: 7
+
+training:
+  batch_size: 1024
+  num_workers: 16                            # persistent_workers=True is set in data/dataset.py
+  learning_rate: 2.8e-4
+  weight_decay: 1.0e-3
+  max_epochs: 150
+  warmup_steps: 2000
+  grad_clip: 1.0
+  mixed_precision: true
+  seed: 42
+  lambda_a: 1.0
+  lambda_b: 1.0
+  lambda_c: 0.0                              # contrastive head disabled
+  early_stop_patience: 20
+
+contrastive:
+  temperature: 0.07
+
+logging:
+  tensorboard: true
+  log_dir: "outputs/runs/fiberformer"
+  save_dir: "outputs/models/fiberformer"
+  log_every_n_steps: 25
+  intraepoch_ckpt_every_n_steps: 100
+  val_every_n_epochs: 1

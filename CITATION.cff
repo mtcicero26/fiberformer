@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use FiberFormer, please cite the associated manuscript and archived software release."
+title: FiberFormer
+type: software
+authors:
+  - family-names: Tullius
+    given-names: Tommy
+version: 0.2.0
+license: MIT
+repository-code: "https://github.com/mtcicero26/fiberformer"
+keywords:
+  - Fiber-seq
+  - chromatin
+  - transformer
+  - representation learning

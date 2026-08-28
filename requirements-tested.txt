@@ -1,0 +1,12 @@
+# Exact environment used for the release-preparation smoke test on 2026-08-22.
+# Install a platform-appropriate PyTorch build first when CUDA is required.
+torch==2.10.0
+numpy==1.25.2
+pandas==2.3.3
+h5py==3.13.0
+PyYAML==6.0.2
+scipy==1.15.2
+scikit-learn==1.6.1
+umap-learn==0.5.11
+matplotlib==3.10.1
+pytest==9.0.2

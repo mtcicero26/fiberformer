@@ -1,0 +1,38 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging
+build/
+dist/
+*.egg-info/
+*.egg
+pip-wheel-metadata/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Editors / IDE
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Model checkpoints. Keep only the reviewed pretrained checkpoint bundled with
+# this repository; training outputs stay untracked.
+*.pt
+!fiberformer/weights/best_model.pt
+
+# Local data + caches + outputs
+cache/
+data/bigbed/
+data/reference/
+outputs/
+runs/
+
+# Jupyter
+.ipynb_checkpoints/
